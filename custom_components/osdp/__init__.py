@@ -1,14 +1,15 @@
 import serial
 import asyncio
 import struct
-from osdp import *
+import osdp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 
-class SerialChannel(Channel):
+class SerialChannel(osdp.Channel):
     def __init__(self, device: str, speed: int):
+        super().__init__()
         self.dev = serial.Serial(device, speed, timeout=0)
 
     def read(self, max_read: int):
@@ -28,7 +29,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
 
     def osdp_event_handler(id: int, event: dict):
         #hass.bus.async_fire("osdp_event", x)
-        if event["event"] == 1:
+        if event["event"] == osdp.Event.CardRead:
           event_data = {
             "nfctag": struct.unpack('>L', event["data"])[0],
             "type": "card_detected"
@@ -41,10 +42,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
     channel = SerialChannel("/dev/ttyUSB0", 115200)
 
     pd_info = [
-        PDInfo(0, channel, scbk=None),
+        osdp.PDInfo(0, channel, scbk=None),
     ]
 
-    cp = ControlPanel(pd_info, log_level=LogLevel.Info)
+    cp = osdp.ControlPanel(pd_info, osdp.LogLevel.Info, osdp_event_handler)
     cp.start()
-    cp.set_event_handler(osdp_event_handler)
     return True
