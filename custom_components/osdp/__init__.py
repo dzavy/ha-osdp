@@ -1,8 +1,8 @@
 from __future__ import annotations
 import logging
-from typing import Any, List
-import osdp
+from typing import List
 import serial
+import osdp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -22,7 +22,10 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class SerialChannel(osdp.Channel):
+    """Simple serial channel implementing osdp.Channel interface."""
+
     def __init__(self, device: str, speed: int):
         super().__init__()
         self.dev = serial.Serial(device, speed, timeout=0)
@@ -37,7 +40,11 @@ class SerialChannel(osdp.Channel):
         self.dev.flush()
 
     def __del__(self):
-        self.dev.close()
+        try:
+            self.dev.close()
+        except Exception:
+            pass
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up an OSDP controller and its readers from a config entry."""
@@ -47,26 +54,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     name: str = data.get(CONF_CONTROLLER_NAME, f"OSDP Controller ({port})")
 
     readers_cfg: List[int] = entry.options.get("readers", [])
-    channel = SerialChannel(port, baudrate)
 
-    # Controller-level callback: dispatch events keyed by reader_id
+    # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
-        rid = event["reader_no"]
+        rid = event.get("reader_no")
         if rid is not None:
-            async_dispatcher_send(hass, signal_reader_update(entry.entry_id, rid), event)
+            async_dispatcher_send(
+                hass,
+                signal_reader_update(entry.entry_id, rid),
+                event,
+            )
         return 0
 
-    # Build ControlPanel with readers and callback
-    cp = osdp.ControlPanel(
-        [osdp.PDInfo(rid, channel, scbk=None) for rid in readers_cfg],
-        osdp.LogLevel.Info,
-        _controller_callback,
-    )
-    cp.start()
+    cp = None
+    if readers_cfg:
+        channel = SerialChannel(port, baudrate)
+        pd_infos = [osdp.PDInfo(rid, channel) for rid in readers_cfg]
+        cp = osdp.ControlPanel(pd_infos, osdp.LogLevel.Info, _controller_callback)
+        cp.start()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "cp": cp,
-        "readers": readers_cfg,  # store IDs
+        "readers": readers_cfg,
         "port": port,
         "baudrate": baudrate,
         "name": name,
@@ -94,8 +103,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Watch for options updates (add/remove readers, baudrate changes)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     _LOGGER.info("OSDP controller on %s @ %s set up with readers: %s", port, baudrate, readers_cfg)
@@ -106,10 +113,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload an OSDP config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    if data:
-        cp: osdp.ControlPanel = data["cp"]
+    if data and data["cp"]:
         try:
-            cp.stop()
+            data["cp"].stop()
         except Exception as exc:
             _LOGGER.warning("Error stopping ControlPanel: %s", exc)
     return unloaded
@@ -122,36 +128,38 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     if not domain_data:
         return
 
-    old_cp: osdp.ControlPanel = domain_data["cp"]
+    old_cp: osdp.ControlPanel | None = domain_data["cp"]
     port: str = domain_data["port"]
     baudrate: int = entry.options.get(CONF_BAUDRATE, domain_data["baudrate"])
     name: str = domain_data["name"]
 
     old_readers_cfg: List[int] = domain_data["readers"]
     new_readers_cfg: List[int] = entry.options.get("readers", [])
-    channel = SerialChannel(port, baudrate)
 
     # Stop old CP
-    try:
-        old_cp.stop()
-    except Exception as exc:
-        _LOGGER.debug("Stopping previous ControlPanel failed: %s", exc)
-
+    if old_cp:
+        try:
+            old_cp.stop()
+        except Exception as exc:
+            _LOGGER.debug("Stopping previous ControlPanel failed: %s", exc)
 
     # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
-        rid = event["reader_no"]
+        rid = event.get("reader_no")
         if rid is not None:
-            async_dispatcher_send(hass, signal_reader_update(entry.entry_id, rid), event)
+            async_dispatcher_send(
+                hass,
+                signal_reader_update(entry.entry_id, rid),
+                event,
+            )
         return 0
 
-    # Build ControlPanel with readers and callback
-    new_cp = osdp.ControlPanel(
-        [osdp.PDInfo(rid, channel, scbk=None) for rid in new_readers_cfg],
-        osdp.LogLevel.Info,
-        _controller_callback,
-    )
-    new_cp.start()
+    new_cp = None
+    if new_readers_cfg:
+        channel = SerialChannel(port, baudrate)
+        pd_infos = [osdp.PDInfo(rid, channel) for rid in new_readers_cfg]
+        new_cp = osdp.ControlPanel(pd_infos, osdp.LogLevel.Info, _controller_callback)
+        new_cp.start()
 
     # Save new CP and readers
     domain_data["cp"] = new_cp
