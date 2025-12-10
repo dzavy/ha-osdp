@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up OSDP Controller",
+        "description": "Configure your OSDP controller hub (serial port, baudrate, name).",
+        "data": {
+          "port": "Serial Port",
+          "baudrate": "Baudrate",
+          "controller_name": "Controller Name"
+        }
+      }
+    },
+    "error": {
+      "invalid_id": "Reader ID must be a number",
+      "out_of_range": "Reader ID must be between 0 and 127",
+      "duplicate": "Reader ID already exists",
+      "not_found": "Reader ID not found"
+    },
+    "abort": {
+      "no_controllers": "No OSDP controllers are configured yet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage OSDP Readers",
+        "description": "Add or remove readers and adjust baudrate.",
+        "data": {
+          "action": "Action",
+          "reader_id": "Reader ID",
+          "baudrate": "Baudrate"
+        }
+      }
+    }
+  }
+}

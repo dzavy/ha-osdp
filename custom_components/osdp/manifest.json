@@ -1,11 +1,12 @@
 {
   "domain": "osdp",
   "name": "OSDP Card Reader",
-  "codeowners": [],
+  "codeowners": ["@dzavy"],
+  "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/dzavy/ha-osdp",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "requirements": ["libosdp==3.1.0"],
-  "version": "0.1.12"
+  "requirements": ["libosdp==3.1.0", "pyserial>=3.5"],
+  "version": "0.2.0"
 }
