@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import logging
-import osdp
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, signal_reader_update
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,21 +18,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     readers = domain_data["readers"]  # list of ints
     port = domain_data["port"]
 
-    entities = [OSDPCardPresentBinarySensor(entry.entry_id, port, rid) for rid in readers]
+    entities = [OSDPReaderOnlineBinarySensor(entry.entry_id, port, rid) for rid in readers]
     async_add_entities(entities)
 
 
-class OSDPCardPresentBinarySensor(BinarySensorEntity):
-    """Binary sensor indicating if a card is present at the reader."""
+class OSDPReaderOnlineBinarySensor(BinarySensorEntity):
+    """Binary sensor indicating if the reader is online."""
 
     _attr_has_entity_name = True
-    _attr_name = "Card present"
+    _attr_name = "Online"
 
     def __init__(self, entry_id: str, port: str, reader_id: int) -> None:
         self._entry_id = entry_id
         self._port = port
         self._reader_id = reader_id
-        self._attr_unique_id = f"osdp_card_present_{entry_id}_{reader_id}"
+        self._attr_unique_id = f"osdp_online_{entry_id}_{reader_id}"
         self._is_on: bool = False
 
     @property
@@ -51,19 +49,13 @@ class OSDPCardPresentBinarySensor(BinarySensorEntity):
     def is_on(self) -> bool:
         return self._is_on
 
-    async def async_added_to_hass(self) -> None:
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                signal_reader_update(self._entry_id, self._reader_id),
-                self._handle_event,
-            )
-        )
-
-    async def _handle_event(self, event: dict) -> None:
-        etype = event["event"]
-        if etype == osdp.Event.CardRead:
-            self._is_on = True
-        else:
-            self._is_on = False
-        self.async_write_ha_state()
+    async def async_update(self) -> None:
+        """Poll ControlPanel for online status."""
+        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
+        cp = domain_data.get("cp") if domain_data else None
+        if cp:
+            try:
+                self._is_on = cp.is_online(self._reader_id)
+            except Exception as exc:
+                _LOGGER.debug("is_online failed for reader %s: %s", self._reader_id, exc)
+                self._is_on = False

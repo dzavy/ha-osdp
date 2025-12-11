@@ -28,6 +28,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     # Per-reader sensors
     for rid in readers:
         entities.append(OSDPLastCardIdSensor(entry.entry_id, port, rid))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "version", "Version"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "model", "Model"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "vendor_code", "Vendor Code"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "serial_number", "Serial Number"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "firmware_version", "Firmware Version"))
 
     # Controller diagnostic sensor
     entities.append(OSDPControllerStatusSensor(entry.entry_id, port, baudrate, name))
@@ -76,6 +81,44 @@ class OSDPLastCardIdSensor(SensorEntity):
             self._last_card_id = struct.unpack('>L', event["data"])[0]
         self.async_write_ha_state()
 
+class OSDPReaderInfoSensor(SensorEntity):
+    """Base class for reader info sensors populated from get_pd_id."""
+
+    def __init__(self, entry_id: str, port: str, reader_id: int, field: str, name: str):
+        self._entry_id = entry_id
+        self._port = port
+        self._reader_id = reader_id
+        self._field = field
+        self._attr_name = name
+        self._attr_unique_id = f"osdp_{field}_{entry_id}_{reader_id}"
+        self._value: int | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"reader_{self._port}_{self._reader_id}")},
+            name=f"OSDP Reader {self._reader_id}",
+            manufacturer="OSDP",
+            model="Card Reader",
+            via_device=(DOMAIN, f"controller_{self._port}"),
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        return self._value
+
+    async def async_update(self) -> None:
+        """Poll ControlPanel for PD ID info."""
+        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
+        cp = domain_data.get("cp") if domain_data else None
+        if cp:
+            try:
+                pd_info = cp.get_pd_id(self._reader_id)
+                if pd_info and self._field in pd_info:
+                    self._value = pd_info[self._field]
+            except Exception as exc:
+                _LOGGER.debug("get_pd_id failed for reader %s: %s", self._reader_id, exc)
+                self._value = None
 
 class OSDPControllerStatusSensor(SensorEntity):
     """Diagnostic sensor for the OSDP controller hub."""
