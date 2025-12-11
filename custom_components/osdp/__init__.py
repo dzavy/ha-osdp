@@ -59,6 +59,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _controller_callback(id: int, event: dict) -> int:
         """Handle events from the OSDP ControlPanel and dispatch per reader."""
         rid = event.get("reader_no")
+        _LOGGER.debug("Dispatching event for reader %s", rid)
+
         if rid is None:
             return 0
 
