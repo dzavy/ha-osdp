@@ -44,10 +44,10 @@ class OSDPConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data=user_input,
         )
 
+    @staticmethod
     @callback
-    def async_get_options_flow(self, config_entry):
+    def async_get_options_flow(config_entry):
         return OSDPOptionsFlowHandler(config_entry)
-
 
 class OSDPOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry):
