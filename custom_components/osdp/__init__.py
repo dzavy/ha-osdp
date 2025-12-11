@@ -7,7 +7,7 @@ import osdp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import async_get as async_get_devreg
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import dispatcher_send
 from homeassistant.helpers import device_registry as dr
 
 from .const import (
@@ -59,18 +59,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _controller_callback(id: int, event: dict) -> int:
         """Handle events from the OSDP ControlPanel and dispatch per reader."""
         rid = event.get("reader_no")
-        _LOGGER.debug("Dispatching event for reader %s", rid)
 
-        if rid is None:
-            return 0
-
-        # Schedule dispatcher send safely on the event loop
-        hass.loop.call_soon_threadsafe(
-            async_dispatcher_send,
-            hass,
-            signal_reader_update(entry.entry_id, rid),
-            event,
-        )
+        if rid is not None:
+            dispatcher_send(
+                hass,
+                signal_reader_update(entry.entry_id, rid),
+                event,
+            )
         return 0
 
     cp = None
@@ -154,7 +149,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
     def _controller_callback(id: int, event: dict) -> int:
         rid = event.get("reader_no")
         if rid is not None:
-            async_dispatcher_send(
+            dispatcher_send(
                 hass,
                 signal_reader_update(entry.entry_id, rid),
                 event,
