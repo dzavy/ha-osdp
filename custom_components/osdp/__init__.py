@@ -58,7 +58,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
         """Handle events from the OSDP ControlPanel and dispatch per reader."""
+        _LOGGER.debug("Dispatching event")
         rid = event.get("reader_no")
+        _LOGGER.debug("Dispatching event for reader %s", rid)
 
         if rid is not None:
             dispatcher_send(
@@ -147,7 +149,9 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
     # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
+        _LOGGER.debug("Dispatching event")
         rid = event.get("reader_no")
+        _LOGGER.debug("Dispatching event for reader %s", rid)
         if rid is not None:
             dispatcher_send(
                 hass,
