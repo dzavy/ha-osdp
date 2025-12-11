@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up OSDP sensors for each reader and the controller diagnostic sensor."""
     domain_data = hass.data[DOMAIN][entry.entry_id]
-    readers = domain_data["readers"]
+    readers = domain_data["readers"]  # list of ints
     port = domain_data["port"]
     baudrate = domain_data["baudrate"]
     name = domain_data["name"]
@@ -25,8 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entities = []
 
     # Per-reader sensors
-    for reader in readers:
-        rid = getattr(reader, "address")
+    for rid in readers:
         entities.append(OSDPLastCardIdSensor(entry.entry_id, port, rid))
 
     # Controller diagnostic sensor
@@ -72,8 +71,8 @@ class OSDPLastCardIdSensor(SensorEntity):
         )
 
     async def _handle_event(self, event: Any) -> None:
-        if getattr(event, "type", None) == "CARD_READ":
-            self._last_card_id = getattr(event, "card_number", None)
+        if event.get("event") == "CARD_READ":
+            self._last_card_id = event.get("card_number")
         self.async_write_ha_state()
 
 
@@ -112,7 +111,7 @@ class OSDPControllerStatusSensor(SensorEntity):
             "baudrate": self._baudrate,
             "port": self._port,
             "reader_count": len(readers),
-            "readers": [getattr(r, "address", None) for r in readers],
+            "readers": readers,
         }
 
     async def async_update(self):

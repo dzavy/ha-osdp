@@ -55,7 +55,6 @@ class OSDPOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         readers = self._entry.options.get("readers", [])
-        baudrate = self._entry.options.get(CONF_BAUDRATE, DEFAULT_BAUDRATE)
         errors = {}
 
         if user_input is not None:
@@ -77,17 +76,15 @@ class OSDPOptionsFlowHandler(config_entries.OptionsFlow):
                     readers.append(reader_id)
                 elif action == "remove":
                     readers.remove(reader_id)
-                baudrate = user_input.get(CONF_BAUDRATE, baudrate)
                 return self.async_create_entry(
                     title="",
-                    data={"readers": readers, CONF_BAUDRATE: baudrate},
+                    data={"readers": readers},
                 )
 
         schema = vol.Schema(
             {
                 vol.Required("action", default="add"): vol.In(["add", "remove"]),
                 vol.Required("reader_id"): int,
-                vol.Optional(CONF_BAUDRATE, default=baudrate): vol.In(COMMON_BAUDRATES),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

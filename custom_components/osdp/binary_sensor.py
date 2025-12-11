@@ -17,10 +17,10 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up OSDP binary sensors for each reader."""
     domain_data = hass.data[DOMAIN][entry.entry_id]
-    readers = domain_data["readers"]
+    readers = domain_data["readers"]  # list of ints
     port = domain_data["port"]
 
-    entities = [OSDPCardPresentBinarySensor(entry.entry_id, port, getattr(reader, "address")) for reader in readers]
+    entities = [OSDPCardPresentBinarySensor(entry.entry_id, port, rid) for rid in readers]
     async_add_entities(entities)
 
 
@@ -61,7 +61,7 @@ class OSDPCardPresentBinarySensor(BinarySensorEntity):
         )
 
     async def _handle_event(self, event: Any) -> None:
-        etype = getattr(event, "type", None)
+        etype = event.get("event")
         if etype == "CARD_READ":
             self._is_on = True
         elif etype == "CARD_REMOVED":
