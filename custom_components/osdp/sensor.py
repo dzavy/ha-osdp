@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+import struct
+import osdp
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -70,9 +71,9 @@ class OSDPLastCardIdSensor(SensorEntity):
             )
         )
 
-    async def _handle_event(self, event: Any) -> None:
-        if event.get("event") == "CARD_READ":
-            self._last_card_id = event.get("card_number")
+    async def _handle_event(self, event: dict) -> None:
+        if event["event"] == osdp.Event.CardRead:
+            self._last_card_id = struct.unpack('>L', event["data"])[0]
         self.async_write_ha_state()
 
 

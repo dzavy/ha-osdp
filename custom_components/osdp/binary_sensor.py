@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+import osdp
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -60,10 +60,10 @@ class OSDPCardPresentBinarySensor(BinarySensorEntity):
             )
         )
 
-    async def _handle_event(self, event: Any) -> None:
-        etype = event.get("event")
-        if etype == "CARD_READ":
+    async def _handle_event(self, event: dict) -> None:
+        etype = event["event"]
+        if etype == osdp.Event.CardRead:
             self._is_on = True
-        elif etype == "CARD_REMOVED":
+        else:
             self._is_on = False
         self.async_write_ha_state()
