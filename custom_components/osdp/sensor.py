@@ -4,6 +4,7 @@ import logging
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -45,7 +46,8 @@ class OSDPReaderInfoSensor(SensorEntity):
         self._field = field
         self._attr_name = name
         self._attr_unique_id = f"osdp_{field}_{entry_id}_{reader_id}"
-        self._value: int | None = None
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._value: str | None = None
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -58,7 +60,7 @@ class OSDPReaderInfoSensor(SensorEntity):
         )
 
     @property
-    def native_value(self) -> int | None:
+    def native_value(self) -> str | None:
         return self._value
 
     async def async_update(self) -> None:
