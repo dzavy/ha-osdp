@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import struct
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
+from ouilookup import OuiLookup
 
 from .const import DOMAIN
 
@@ -72,7 +72,30 @@ class OSDPReaderInfoSensor(SensorEntity):
             try:
                 pd_info = cp.get_pd_id(self._reader_id)
                 if pd_info:
-                    self._value = struct.unpack('>L', getattr(pd_info, self._field, None))[0]
+                    match self._field:
+                        case "version":
+                            tmpint = getattr(pd_info, self._field, None)
+                            tmphex = '{:0<2X}'.format(tmpint)
+                            self._value = tmphex
+                        case "model":
+                            tmpint = getattr(pd_info, self._field, None)
+                            tmphex = '{:0<2X}'.format(tmpint)
+                            self._value = tmphex
+                        case "vendor_code":
+                            tmpint = getattr(pd_info, self._field, None)
+                            tmphex = '{:0<6X}'.format(tmpint)
+                            self._value = list(OuiLookup().query("%s:%s:%s" % (tmphex[4:6], tmphex[2:4], tmphex[0:2]))[0].values())[0]
+                        case "serial_number":
+                            tmpint = getattr(pd_info, self._field, None)
+                            if tmpint < 0:
+                                tmpint = tmpint + 2**32
+                            tmphex = '{:0<8X}'.format(tmpint)
+                            self._value = "%s%s%s%s" % (tmphex[6:8], tmphex[4:6], tmphex[2:4], tmphex[0:2])
+                        case "firmware_version":
+                            tmpint = getattr(pd_info, self._field, None)
+                            tmphex = '{:0<6X}'.format(tmpint)
+                            self._value = "%s.%s.%s" % (tmphex[0:2], tmphex[2:4], tmphex[4:6])
+
             except Exception as exc:
                 _LOGGER.debug("get_pd_id failed for reader %s: %s", self._reader_id, exc)
                 self._value = None
