@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     for rid in readers:
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "version", "Version"))
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "model", "Model"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "vendor_code", "Vendor Code"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "vendor_code", "Vendor"))
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "serial_number", "Serial Number"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "firmware_version", "Firmware Version"))
+        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "firmware_version", "Firmware"))
 
     # Controller diagnostic sensor
     entities.append(OSDPControllerStatusSensor(entry.entry_id, port, baudrate, name))
@@ -75,25 +75,25 @@ class OSDPReaderInfoSensor(SensorEntity):
                     match self._field:
                         case "version":
                             tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0<2X}'.format(tmpint)
+                            tmphex = '{:0>2X}'.format(tmpint)
                             self._value = tmphex
                         case "model":
                             tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0<2X}'.format(tmpint)
+                            tmphex = '{:0>2X}'.format(tmpint)
                             self._value = tmphex
                         case "vendor_code":
                             tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0<6X}'.format(tmpint)
+                            tmphex = '{:0>6X}'.format(tmpint)
                             self._value = list(OuiLookup().query("%s:%s:%s" % (tmphex[4:6], tmphex[2:4], tmphex[0:2]))[0].values())[0]
                         case "serial_number":
                             tmpint = getattr(pd_info, self._field, None)
                             if tmpint < 0:
                                 tmpint = tmpint + 2**32
-                            tmphex = '{:0<8X}'.format(tmpint)
+                            tmphex = '{:0>8X}'.format(tmpint)
                             self._value = "%s%s%s%s" % (tmphex[6:8], tmphex[4:6], tmphex[2:4], tmphex[0:2])
                         case "firmware_version":
                             tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0<6X}'.format(tmpint)
+                            tmphex = '{:0>6X}'.format(tmpint)
                             self._value = "%s.%s.%s" % (tmphex[0:2], tmphex[2:4], tmphex[4:6])
 
             except Exception as exc:
