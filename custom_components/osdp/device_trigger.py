@@ -16,6 +16,16 @@ from .const import DOMAIN
 # Supported trigger types
 TRIGGER_TYPES = {"card_read"}
 
+TRIGGER_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Required(CONF_PLATFORM): "device",
+            vol.Required(CONF_DOMAIN): DOMAIN,
+            vol.Required(CONF_DEVICE_ID): str,
+            vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES),
+        }
+    ),
+)
 
 async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict[str, Any]]:
     """List device triggers for a given OSDP reader device."""
