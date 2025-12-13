@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import struct
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -71,7 +72,7 @@ class OSDPReaderInfoSensor(SensorEntity):
             try:
                 pd_info = cp.get_pd_id(self._reader_id)
                 if pd_info:
-                    self._value = getattr(pd_info, self._field, None)
+                    self._value = struct.unpack('>L', getattr(pd_info, self._field, None))[0]
             except Exception as exc:
                 _LOGGER.debug("get_pd_id failed for reader %s: %s", self._reader_id, exc)
                 self._value = None
