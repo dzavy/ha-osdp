@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import logging
-import struct
-import osdp
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import DOMAIN, signal_reader_update
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,7 +24,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
     # Per-reader sensors
     for rid in readers:
-        entities.append(OSDPLastCardIdSensor(entry.entry_id, port, rid))
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "version", "Version"))
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "model", "Model"))
         entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "vendor_code", "Vendor Code"))
@@ -38,48 +34,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entities.append(OSDPControllerStatusSensor(entry.entry_id, port, baudrate, name))
 
     async_add_entities(entities)
-
-
-class OSDPLastCardIdSensor(SensorEntity):
-    """Sensor showing last card ID read by a reader."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Last card ID"
-
-    def __init__(self, entry_id: str, port: str, reader_id: int) -> None:
-        self._entry_id = entry_id
-        self._port = port
-        self._reader_id = reader_id
-        self._attr_unique_id = f"osdp_last_card_id_{entry_id}_{reader_id}"
-        self._last_card_id: str | None = None
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"reader_{self._port}_{self._reader_id}")},
-            name=f"OSDP Reader {self._reader_id}",
-            manufacturer="OSDP",
-            model="Card Reader",
-            via_device=(DOMAIN, f"controller_{self._port}"),
-        )
-
-    @property
-    def native_value(self) -> str | None:
-        return self._last_card_id
-
-    async def async_added_to_hass(self) -> None:
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass,
-                signal_reader_update(self._entry_id, self._reader_id),
-                self._handle_event,
-            )
-        )
-
-    async def _handle_event(self, event: dict) -> None:
-        if event["event"] == osdp.Event.CardRead:
-            self._last_card_id = struct.unpack('>L', event["data"])[0]
-        self.async_write_ha_state()
 
 class OSDPReaderInfoSensor(SensorEntity):
     """Base class for reader info sensors populated from get_pd_id."""
@@ -114,8 +68,8 @@ class OSDPReaderInfoSensor(SensorEntity):
         if cp:
             try:
                 pd_info = cp.get_pd_id(self._reader_id)
-                if pd_info and self._field in pd_info:
-                    self._value = pd_info[self._field]
+                if pd_info:
+                    self._value = getattr(pd_info, self._field, None)
             except Exception as exc:
                 _LOGGER.debug("get_pd_id failed for reader %s: %s", self._reader_id, exc)
                 self._value = None
