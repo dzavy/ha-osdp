@@ -3,6 +3,7 @@ from __future__ import annotations
 import voluptuous as vol
 from typing import Any
 
+from homeassistant.components.device_automation import DEVICE_TRIGGER_BASE_SCHEMA
 from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_PLATFORM, CONF_TYPE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -14,15 +15,10 @@ from .const import DOMAIN
 # Supported trigger types
 TRIGGER_TYPES = {"card_read"}
 
-TRIGGER_SCHEMA = vol.All(
-    vol.Schema(
-        {
-            vol.Required(CONF_PLATFORM): "device",
-            vol.Required(CONF_DOMAIN): DOMAIN,
-            vol.Required(CONF_DEVICE_ID): str,
-            vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES),
-        }
-    ),
+TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
+    {
+        vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES),
+    }
 )
 
 async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict[str, Any]]:
