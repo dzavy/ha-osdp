@@ -8,5 +8,5 @@
   "integration_type": "hub",
   "iot_class": "local_polling",
   "requirements": ["libosdp>=3.1.0", "pyserial>=3.5", "ouilookup>=0.3.1"],
-  "version": "0.3.7"
+  "version": "0.3.8"
 }

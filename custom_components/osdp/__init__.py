@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import struct
 from typing import List
 import serial
 import osdp
@@ -7,7 +8,6 @@ import osdp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import async_get as async_get_devreg
-from homeassistant.helpers.dispatcher import dispatcher_send
 from homeassistant.helpers import device_registry as dr
 
 from .const import (
@@ -17,7 +17,6 @@ from .const import (
     CONF_BAUDRATE,
     CONF_CONTROLLER_NAME,
     DEFAULT_BAUDRATE,
-    signal_reader_update,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,16 +57,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
         """Handle events from the OSDP ControlPanel and dispatch per reader."""
-        _LOGGER.debug("Dispatching event")
         rid = event["reader_no"]
-        _LOGGER.debug("Dispatching event for reader %s", rid)
 
-        if rid is not None:
-            dispatcher_send(
-                hass,
-                signal_reader_update(entry.entry_id, rid),
-                event,
-            )
+        devreg = dr.async_get(hass)
+
+        dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
+
+        if event["event"] == osdp.Event.CardRead and dev is not None:
+            event_data = {
+                "card": struct.unpack('>L', event["data"])[0],
+                "type": "card_read",
+                "device_id": dev.id
+            }
+            hass.bus.fire("osdp_event", event_data)
+
         return 0
 
     cp = None
@@ -149,15 +152,21 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
     # Controller-level callback
     def _controller_callback(id: int, event: dict) -> int:
-        _LOGGER.debug("Dispatching event")
+        """Handle events from the OSDP ControlPanel and dispatch per reader."""
         rid = event["reader_no"]
-        _LOGGER.debug("Dispatching event for reader %s", rid)
-        if rid is not None:
-            dispatcher_send(
-                hass,
-                signal_reader_update(entry.entry_id, rid),
-                event,
-            )
+
+        devreg = dr.async_get(hass)
+
+        dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
+
+        if event["event"] == osdp.Event.CardRead and dev is not None:
+            event_data = {
+                "card": struct.unpack('>L', event["data"])[0],
+                "type": "card_read",
+                "device_id": dev.id
+            }
+            hass.bus.fire("osdp_event", event_data)
+
         return 0
 
     new_cp = None

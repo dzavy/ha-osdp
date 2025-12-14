@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import struct
-import osdp
-
 import voluptuous as vol
 from typing import Any
 
 from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_PLATFORM, CONF_TYPE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.trigger import TriggerActionType
+from homeassistant.components.homeassistant.triggers import event as event_trigger
+from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN
 
@@ -50,46 +48,24 @@ async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict[s
                 )
     return triggers
 
+async def async_get_trigger_capabilities(hass: HomeAssistant, config: ConfigType) -> dict[str, vol.Schema]:
+    """List trigger capabilities."""
+    return {
+        "extra_fields": vol.Schema(None)
+    }
 
-async def async_get_trigger_capabilities(
-        hass: HomeAssistant, device_id: str, trigger: dict[str, Any]
-) -> dict[str, Any]:
-    """Return extra capabilities for a trigger (none for card_read)."""
-    return {"extra_fields": vol.Schema({})}
-
-
-async def async_attach_trigger(
-        hass: HomeAssistant,
-        device_id: str,
-        trigger: dict[str, Any],
-        action: TriggerActionType,
-        trigger_info: dict[str, Any],
-) -> Any:
-    """Attach a trigger to listen for card_read events."""
-    from homeassistant.helpers.dispatcher import async_dispatcher_connect
-
-    dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get(device_id)
-    if not device:
-        return None
-
-    # Extract reader_id from identifier string
-    reader_id = None
-    for ident_domain, ident in device.identifiers:
-        if ident_domain == DOMAIN and ident.startswith("reader_"):
-            # ident looks like "reader_<port>_<rid>"
-            try:
-                reader_id = int(ident.split("_")[-1])
-            except Exception:
-                pass
-
-    if reader_id is None:
-        return None
-
-    signal = f"osdp_update_{trigger_info['config_entry'].entry_id}_{reader_id}"
-
-    async def _handle_event(event: dict) -> None:
-        if trigger[CONF_TYPE] == "card_read" and event["event"] == osdp.Event.CardRead:
-            await action({"card_number": struct.unpack('>L', event["data"])[0]})
-
-    return async_dispatcher_connect(hass, signal, _handle_event)
+async def async_attach_trigger(hass, config, action, trigger_info):
+    """Attach a trigger."""
+    event_config = event_trigger.TRIGGER_SCHEMA(
+        {
+            event_trigger.CONF_PLATFORM: "event",
+            event_trigger.CONF_EVENT_TYPE: "osdp_event",
+            event_trigger.CONF_EVENT_DATA: {
+                CONF_DEVICE_ID: config[CONF_DEVICE_ID],
+                CONF_TYPE: config[CONF_TYPE],
+            },
+        }
+    )
+    return await event_trigger.async_attach_trigger(
+        hass, event_config, action, trigger_info, platform_type="device"
+    )
