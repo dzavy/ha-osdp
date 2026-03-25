@@ -13,7 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN
 
 # Supported trigger types
-TRIGGER_TYPES = {"card_read"}
+TRIGGER_TYPES = {"tag_scanned"}
 
 TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
     {

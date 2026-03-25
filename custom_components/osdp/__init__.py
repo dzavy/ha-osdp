@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import async_get as async_get_devreg
 from homeassistant.helpers import device_registry as dr
+from homeassistant.components import tag
 
 from .const import (
     DOMAIN,
@@ -65,10 +66,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         if event["event"] == osdp.Event.CardRead and dev is not None:
             event_data = {
-                "card": struct.unpack('>L', event["data"])[0],
-                "type": "card_read",
+                "tag_id": struct.unpack('>L', event["data"])[0],
+                "type": "tag_scanned",
                 "device_id": dev.id
             }
+            hass.async_create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
             hass.bus.fire("osdp_event", event_data)
 
         return 0
@@ -161,10 +163,11 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
         if event["event"] == osdp.Event.CardRead and dev is not None:
             event_data = {
-                "card": struct.unpack('>L', event["data"])[0],
-                "type": "card_read",
+                "tag_id": struct.unpack('>L', event["data"])[0],
+                "type": "tag_scanned",
                 "device_id": dev.id
             }
+            hass.async_create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
             hass.bus.fire("osdp_event", event_data)
 
         return 0

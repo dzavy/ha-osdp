@@ -25,18 +25,17 @@
     "step": {
       "init": {
         "title": "Manage OSDP Readers",
-        "description": "Add or remove readers and adjust baudrate.",
+        "description": "Add or remove readers",
         "data": {
           "action": "Action",
-          "reader_id": "Reader ID",
-          "baudrate": "Baudrate"
+          "reader_id": "Reader ID"
         }
       }
     }
   },
   "device_automation": {
     "trigger_type": {
-      "card_read": "Card read"
+      "tag_scanned": "Tag scanned"
     }
   }
 }
