@@ -70,7 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "type": "tag_scanned",
                 "device_id": dev.id
             }
-            hass.async_create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
+            hass.create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
             hass.bus.fire("osdp_event", event_data)
 
         return 0
@@ -167,7 +167,7 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
                 "type": "tag_scanned",
                 "device_id": dev.id
             }
-            hass.async_create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
+            hass.create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
             hass.bus.fire("osdp_event", event_data)
 
         return 0
