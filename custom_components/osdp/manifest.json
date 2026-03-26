@@ -9,5 +9,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/dzavy/ha-osdp/issues",
   "requirements": ["libosdp>=3.2.0", "pyserial>=3.5", "ouilookup>=0.3.1"],
-  "version": "0.4.0"
+  "version": "0.4.2"
 }

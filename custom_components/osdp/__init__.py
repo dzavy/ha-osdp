@@ -6,7 +6,7 @@ import serial
 import osdp
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback, Context, EventOrigin
 from homeassistant.helpers.device_registry import async_get as async_get_devreg
 from homeassistant.helpers import device_registry as dr
 from homeassistant.components import tag
@@ -64,6 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
 
+        ctx = Context(user_id="80136773bd514db4a8b1631fd33194ad")
+
         if event["event"] == osdp.Event.CardRead and dev is not None:
             event_data = {
                 "tag_id": struct.unpack('>L', event["data"])[0],
@@ -71,7 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "device_id": dev.id
             }
             hass.create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
-            hass.bus.fire("osdp_event", event_data)
+            hass.bus.fire("osdp_event", event_data, EventOrigin.local, ctx)
 
         return 0
 
@@ -161,14 +163,16 @@ async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
         dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
 
+        ctx = Context(user_id="80136773bd514db4a8b1631fd33194ad")
+
         if event["event"] == osdp.Event.CardRead and dev is not None:
             event_data = {
                 "tag_id": struct.unpack('>L', event["data"])[0],
                 "type": "tag_scanned",
                 "device_id": dev.id
             }
-            hass.create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"]))
-            hass.bus.fire("osdp_event", event_data)
+            hass.create_task(tag.async_scan_tag(hass, event_data["tag_id"], event_data["device_id"], ctx))
+            hass.bus.fire("osdp_event", event_data, EventOrigin.local, ctx)
 
         return 0
 
