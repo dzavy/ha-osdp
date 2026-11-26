@@ -1,0 +1,4 @@
+pytest-homeassistant-custom-component
+libosdp>=3.2.0
+pyserial>=3.5
+ouilookup>=0.3.1

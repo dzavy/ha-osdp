@@ -1,61 +1,70 @@
+"""Binary sensors for the OSDP integration."""
+
 from __future__ import annotations
 
-import logging
-
-from homeassistant.components.binary_sensor import BinarySensorEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
+from .coordinator import OSDPConfigEntry
+from .entity import OSDPControllerEntity, OSDPReaderEntity
 
-_LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up OSDP binary sensors for each reader."""
-    domain_data = hass.data[DOMAIN][entry.entry_id]
-    readers = domain_data["readers"]  # list of ints
-    port = domain_data["port"]
-
-    entities = [OSDPReaderOnlineBinarySensor(entry.entry_id, port, rid) for rid in readers]
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: OSDPConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up OSDP binary sensors."""
+    coordinator = entry.runtime_data.coordinator
+    entities: list[BinarySensorEntity] = [OSDPBusConnectedSensor(coordinator)]
+    for reader in entry.runtime_data.hub.readers:
+        entities.append(OSDPReaderOnlineSensor(coordinator, reader, "online"))
+        entities.append(OSDPReaderSecureSensor(coordinator, reader, "secure_channel"))
     async_add_entities(entities)
 
 
-class OSDPReaderOnlineBinarySensor(BinarySensorEntity):
-    """Binary sensor indicating if the reader is online."""
+class OSDPBusConnectedSensor(OSDPControllerEntity, BinarySensorEntity):
+    """Whether the serial adapter is present and open."""
 
-    _attr_has_entity_name = True
-    _attr_name = "Online"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, entry_id: str, port: str, reader_id: int) -> None:
-        self._entry_id = entry_id
-        self._port = port
-        self._reader_id = reader_id
-        self._attr_unique_id = f"osdp_online_{entry_id}_{reader_id}"
-        self._is_on: bool = False
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"reader_{self._port}_{self._reader_id}")},
-            name=f"OSDP Reader {self._reader_id}",
-            manufacturer="OSDP",
-            model="Card Reader",
-            via_device=(DOMAIN, f"controller_{self._port}"),
-        )
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "serial_connection")
 
     @property
     def is_on(self) -> bool:
-        return self._is_on
+        return bool(self.coordinator.data and self.coordinator.data.connected)
 
-    async def async_update(self) -> None:
-        """Poll ControlPanel for online status."""
-        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
-        cp = domain_data.get("cp") if domain_data else None
-        if cp:
-            try:
-                self._is_on = cp.is_online(self._reader_id)
-            except Exception as exc:
-                _LOGGER.debug("is_online failed for reader %s: %s", self._reader_id, exc)
-                self._is_on = False
+    @property
+    def extra_state_attributes(self) -> dict[str, str | None]:
+        hub = self.coordinator.hub
+        return {"port": hub.port, "last_error": hub.channel.last_error}
+
+
+class OSDPReaderOnlineSensor(OSDPReaderEntity, BinarySensorEntity):
+    """Whether the reader answers polls."""
+
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def is_on(self) -> bool:
+        return self.reader.address in self.coordinator.data.online
+
+
+class OSDPReaderSecureSensor(OSDPReaderEntity, BinarySensorEntity):
+    """Whether the OSDP Secure Channel is established with the reader."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def is_on(self) -> bool:
+        return self.reader.address in self.coordinator.data.secure

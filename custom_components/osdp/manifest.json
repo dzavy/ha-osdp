@@ -1,13 +1,21 @@
 {
   "domain": "osdp",
   "name": "OSDP",
-  "codeowners": ["@dzavy"],
+  "codeowners": [
+    "@dzavy"
+  ],
   "config_flow": true,
-  "dependencies": ["tag"],
+  "dependencies": [
+    "tag"
+  ],
   "documentation": "https://github.com/dzavy/ha-osdp",
   "integration_type": "hub",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "issue_tracker": "https://github.com/dzavy/ha-osdp/issues",
-  "requirements": ["libosdp>=3.2.0", "pyserial>=3.5", "ouilookup>=0.3.1"],
-  "version": "0.4.3"
+  "requirements": [
+    "libosdp>=3.2.0",
+    "pyserial>=3.5",
+    "ouilookup>=0.3.1"
+  ],
+  "version": "0.5.0"
 }

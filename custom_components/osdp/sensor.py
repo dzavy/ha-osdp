@@ -1,147 +1,45 @@
+"""Sensors for the OSDP integration."""
+
 from __future__ import annotations
 
-import logging
-
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
-from ouilookup import OuiLookup
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
+from .coordinator import OSDPConfigEntry
+from .entity import OSDPControllerEntity
 
-_LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up OSDP sensors for each reader and the controller diagnostic sensor."""
-    domain_data = hass.data[DOMAIN][entry.entry_id]
-    readers = domain_data["readers"]  # list of ints
-    port = domain_data["port"]
-    baudrate = domain_data["baudrate"]
-    name = domain_data["name"]
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: OSDPConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up OSDP sensors."""
+    async_add_entities([OSDPReadersOnlineSensor(entry.runtime_data.coordinator)])
 
-    entities = []
 
-    # Per-reader sensors
-    for rid in readers:
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "version", "Version"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "model", "Model"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "vendor_code", "Vendor"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "serial_number", "Serial Number"))
-        entities.append(OSDPReaderInfoSensor(entry.entry_id, port, rid, "firmware_version", "Firmware"))
+class OSDPReadersOnlineSensor(OSDPControllerEntity, SensorEntity):
+    """Number of configured readers currently online."""
 
-    # Controller diagnostic sensor
-    entities.append(OSDPControllerStatusSensor(entry.entry_id, port, baudrate, name))
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    async_add_entities(entities)
-
-class OSDPReaderInfoSensor(SensorEntity):
-    """Base class for reader info sensors populated from get_pd_id."""
-
-    def __init__(self, entry_id: str, port: str, reader_id: int, field: str, name: str):
-        self._entry_id = entry_id
-        self._port = port
-        self._reader_id = reader_id
-        self._field = field
-        self._attr_name = name
-        self._attr_unique_id = f"osdp_{field}_{entry_id}_{reader_id}"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._value: str | None = None
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "readers_online")
 
     @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"reader_{self._port}_{self._reader_id}")},
-            name=f"OSDP Reader {self._reader_id}",
-            manufacturer="OSDP",
-            model="Card Reader",
-            via_device=(DOMAIN, f"controller_{self._port}"),
-        )
+    def native_value(self) -> int:
+        data = self.coordinator.data
+        return len(data.online) if data and data.connected else 0
 
     @property
-    def native_value(self) -> str | None:
-        return self._value
-
-    async def async_update(self) -> None:
-        """Poll ControlPanel for PD ID info."""
-        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
-        cp = domain_data.get("cp") if domain_data else None
-        if cp:
-            try:
-                pd_info = cp.get_pd_id(self._reader_id)
-                if pd_info:
-                    match self._field:
-                        case "version":
-                            tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0>2X}'.format(tmpint)
-                            self._value = tmphex
-                        case "model":
-                            tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0>2X}'.format(tmpint)
-                            self._value = tmphex
-                        case "vendor_code":
-                            tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0>6X}'.format(tmpint)
-                            self._value = list(OuiLookup().query("%s:%s:%s" % (tmphex[4:6], tmphex[2:4], tmphex[0:2]))[0].values())[0]
-                        case "serial_number":
-                            tmpint = getattr(pd_info, self._field, None)
-                            if tmpint < 0:
-                                tmpint = tmpint + 2**32
-                            tmphex = '{:0>8X}'.format(tmpint)
-                            self._value = "%s%s%s%s" % (tmphex[6:8], tmphex[4:6], tmphex[2:4], tmphex[0:2])
-                        case "firmware_version":
-                            tmpint = getattr(pd_info, self._field, None)
-                            tmphex = '{:0>6X}'.format(tmpint)
-                            self._value = "%s.%s.%s" % (tmphex[0:2], tmphex[2:4], tmphex[4:6])
-
-            except Exception as exc:
-                _LOGGER.debug("get_pd_id failed for reader %s: %s", self._reader_id, exc)
-                self._value = None
-
-class OSDPControllerStatusSensor(SensorEntity):
-    """Diagnostic sensor for the OSDP controller hub."""
-
-    _attr_has_entity_name = True
-    _attr_name = "Controller Status"
-
-    def __init__(self, entry_id: str, port: str, baudrate: int, name: str):
-        self._entry_id = entry_id
-        self._port = port
-        self._baudrate = baudrate
-        self._name = name
-        self._attr_unique_id = f"osdp_controller_status_{entry_id}"
-        self._status = "running"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"controller_{self._port}")},
-            manufacturer="OSDP",
-            name=self._name,
-            model="OSDP Bus",
-        )
-
-    @property
-    def native_value(self):
-        return f"{self._status} @ {self._baudrate} baud"
-
-    @property
-    def extra_state_attributes(self):
-        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
-        readers = domain_data.get("readers", []) if domain_data else []
+    def extra_state_attributes(self) -> dict[str, list[int]]:
+        data = self.coordinator.data
         return {
-            "baudrate": self._baudrate,
-            "port": self._port,
-            "reader_count": len(readers),
-            "readers": readers,
+            "configured": self.coordinator.hub.addresses,
+            "online": sorted(data.online) if data else [],
         }
-
-    async def async_update(self):
-        domain_data = self.hass.data[DOMAIN].get(self._entry_id)
-        if domain_data and domain_data.get("cp"):
-            self._status = "running"
-            self._baudrate = domain_data.get("baudrate", self._baudrate)
-        else:
-            self._status = "stopped"
