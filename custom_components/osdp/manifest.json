@@ -1,6 +1,9 @@
 {
   "domain": "osdp",
   "name": "OSDP",
+  "categories": [
+    "security_safety.locks_access"
+  ],
   "codeowners": [
     "@dzavy"
   ],
@@ -14,7 +17,6 @@
   "issue_tracker": "https://github.com/dzavy/ha-osdp/issues",
   "requirements": [
     "libosdp>=3.2.0",
-    "pyserial>=3.5",
     "ouilookup>=0.3.1"
   ],
   "version": "0.5.0"
