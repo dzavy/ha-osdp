@@ -98,17 +98,15 @@ def _resolve(hass: HomeAssistant, device_id: str):
             translation_key="unknown_device",
             translation_placeholders={"device_id": device_id},
         )
-    for entry_id in device.config_entries:
-        entry = hass.config_entries.async_get_entry(entry_id)
-        if entry is None or entry.domain != DOMAIN:
-            continue
+    entry = hass.config_entries.async_get_entry(device.config_entry_id)
+    if entry is not None and entry.domain == DOMAIN:
         if entry.state is not ConfigEntryState.LOADED:
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="not_loaded"
             )
         hub = entry.runtime_data.hub
         for reader in hub.readers:
-            if reader_identifier(entry_id, reader.address) in device.identifiers:
+            if reader_identifier(entry.entry_id, reader.address) in device.identifiers:
                 return hub, reader.address
     raise ServiceValidationError(
         translation_domain=DOMAIN,

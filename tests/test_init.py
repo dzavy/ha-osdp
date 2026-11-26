@@ -42,7 +42,7 @@ async def test_setup_creates_devices(hass, mock_osdp, config_entry) -> None:
     assert [p.address for p in cp.pd_infos] == [1, 2]
 
     devreg = dr.async_get(hass)
-    front = devreg.async_get_device({reader_identifier(config_entry.entry_id, 1)})
+    front = devreg.async_get_device_by_identifier(reader_identifier(config_entry.entry_id, 1), config_entry.entry_id)
     assert front is not None and front.name == "Front door"
 
 
@@ -76,8 +76,9 @@ async def test_card_read_routed_by_pd_index(hass, mock_osdp, config_entry) -> No
     )
     await hass.async_block_till_done()
 
-    back = dr.async_get(hass).async_get_device(
-        {reader_identifier(config_entry.entry_id, 2)}
+    back = dr.async_get(hass).async_get_device_by_identifier(
+        reader_identifier(config_entry.entry_id, 2),
+        config_entry.entry_id,
     )
     assert len(events) == 1
     assert events[0].data["device_id"] == back.id
@@ -117,8 +118,9 @@ async def test_status_polling_and_identity(hass, mock_osdp, config_entry) -> Non
     assert hass.states.get("binary_sensor.back_door_online").state == "off"
     assert hass.states.get("sensor.front_door_bus_readers_online").state == "1"
 
-    device = dr.async_get(hass).async_get_device(
-        {reader_identifier(config_entry.entry_id, 1)}
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        reader_identifier(config_entry.entry_id, 1),
+        config_entry.entry_id,
     )
     assert device.manufacturer == "Test Vendor"
     assert device.serial_number == "01020304"
@@ -128,8 +130,9 @@ async def test_status_polling_and_identity(hass, mock_osdp, config_entry) -> Non
 async def test_actions(hass, mock_osdp, config_entry) -> None:
     await _setup(hass, config_entry)
     cp = mock_osdp.instances[0]
-    device = dr.async_get(hass).async_get_device(
-        {reader_identifier(config_entry.entry_id, 1)}
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        reader_identifier(config_entry.entry_id, 1),
+        config_entry.entry_id,
     )
 
     with pytest.raises(HomeAssistantError):
@@ -201,8 +204,9 @@ async def test_remove_reader_device(hass, mock_osdp, config_entry, hass_ws_clien
 
     assert await async_setup_component(hass, "config", {})
     await _setup(hass, config_entry)
-    device = dr.async_get(hass).async_get_device(
-        {reader_identifier(config_entry.entry_id, 2)}
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        reader_identifier(config_entry.entry_id, 2),
+        config_entry.entry_id,
     )
     client = await hass_ws_client(hass)
     await client.send_json(
@@ -246,7 +250,7 @@ async def test_migrate_v1(hass, mock_osdp) -> None:
 
     assert entry.version == 2
     assert entry.options[CONF_READERS] == [{"address": 3, "name": "OSDP Reader 3"}]
-    migrated = devreg.async_get_device({reader_identifier(entry.entry_id, 3)})
+    migrated = devreg.async_get_device_by_identifier(reader_identifier(entry.entry_id, 3), entry.entry_id)
     assert migrated is not None and migrated.id == old_reader.id
     assert entreg.async_get_entity_id("sensor", DOMAIN, f"osdp_model_{entry.entry_id}_3") is None
     assert entreg.async_get(online.entity_id) is not None
