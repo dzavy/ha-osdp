@@ -9,6 +9,8 @@ and outputs.
 
 ## Installation
 
+Requires Home Assistant 2026.8 or newer.
+
 1. In HACS, add this repository as a custom repository (category *Integration*)
    and install **OSDP**. Alternatively, copy `custom_components/osdp` into your
    Home Assistant `config/custom_components` directory.
@@ -105,3 +107,7 @@ automation:
 pip install -r requirements_test.txt
 pytest
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

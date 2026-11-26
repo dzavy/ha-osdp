@@ -285,7 +285,9 @@ class OSDPHub:
         """Process a PD event on the event loop."""
         _LOGGER.debug("Reader %s event: %s", address, event)
         devreg = dr.async_get(self.hass)
-        device = devreg.async_get_device({reader_identifier(self.entry.entry_id, address)})
+        device = devreg.async_get_device_by_identifier(
+            reader_identifier(self.entry.entry_id, address), self.entry.entry_id
+        )
         if device is None:
             return
 

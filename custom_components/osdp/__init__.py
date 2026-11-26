@@ -112,7 +112,7 @@ def _async_register_devices(
             manufacturer="OSDP",
             model="Card Reader",
             name=reader.name,
-            via_device=controller_identifier(entry.entry_id),
+            via_device_id=controller.id,
         )
         if device.name != reader.name:
             devreg.async_update_device(device.id, name=reader.name)
@@ -120,9 +120,7 @@ def _async_register_devices(
 
     for device in dr.async_entries_for_config_entry(devreg, entry.entry_id):
         if device.id not in wanted:
-            devreg.async_update_device(
-                device.id, remove_config_entry_id=entry.entry_id
-            )
+            devreg.async_remove_device(device.id)
 
 
 async def async_remove_config_entry_device(
@@ -184,7 +182,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: OSDPConfigEntry) -> bo
                 entry.entry_id, rid
             )
         for old, new in remap.items():
-            if device := devreg.async_get_device({old}):
+            if device := devreg.async_get_device_by_identifier(old, entry.entry_id):
                 devreg.async_update_device(device.id, new_identifiers={new})
 
         # Reader identity moved from five sensors into the device registry and

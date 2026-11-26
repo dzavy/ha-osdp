@@ -54,8 +54,9 @@ class OSDPCoordinator(DataUpdateCoordinator[BusState]):
         for address, ident in state.identities.items():
             if self._published.get(address) == ident:
                 continue
-            device = devreg.async_get_device(
-                {reader_identifier(self.config_entry.entry_id, address)}
+            device = devreg.async_get_device_by_identifier(
+                reader_identifier(self.config_entry.entry_id, address),
+                self.config_entry.entry_id,
             )
             if device is None:
                 continue

@@ -174,14 +174,17 @@ class OSDPConfigFlow(ConfigFlow, domain=DOMAIN):
             ):
                 errors[CONF_PORT] = error
             else:
-                return self.async_update_reload_and_abort(
+                # The entry's update listener reloads it when the data changes.
+                self.hass.config_entries.async_update_entry(
                     entry,
                     unique_id=f"{DOMAIN}_{port}",
-                    data_updates={
+                    data={
+                        **entry.data,
                         CONF_PORT: port,
                         CONF_BAUDRATE: user_input[CONF_BAUDRATE],
                     },
                 )
+                return self.async_abort(reason="reconfigure_successful")
 
         ports = await self.hass.async_add_executor_job(_list_ports)
         defaults = user_input or dict(entry.data)
