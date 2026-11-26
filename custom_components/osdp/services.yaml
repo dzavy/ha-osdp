@@ -1,0 +1,110 @@
+set_led:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            integration: osdp
+    color:
+      required: true
+      example: green
+      selector:
+        select:
+          translation_key: led_color
+          options: ["off", "red", "green", "amber", "blue", "magenta", "cyan", "white"]
+    off_color:
+      default: "off"
+      selector:
+        select:
+          translation_key: led_color
+          options: ["off", "red", "green", "amber", "blue", "magenta", "cyan", "white"]
+    on_time:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 25500
+          step: 100
+          unit_of_measurement: ms
+    off_time:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 25500
+          step: 100
+          unit_of_measurement: ms
+    duration:
+      selector:
+        number:
+          min: 0.1
+          max: 25.5
+          step: 0.1
+          unit_of_measurement: s
+    led_number:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+
+beep:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            integration: osdp
+    on_time:
+      default: 500
+      selector:
+        number:
+          min: 100
+          max: 25500
+          step: 100
+          unit_of_measurement: ms
+    off_time:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 25500
+          step: 100
+          unit_of_measurement: ms
+    repeat:
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 255
+          mode: box
+
+set_output:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          filter:
+            integration: osdp
+    output:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 255
+          mode: box
+    state:
+      required: true
+      selector:
+        boolean:
+    duration:
+      selector:
+        number:
+          min: 0.1
+          max: 25.5
+          step: 0.1
+          unit_of_measurement: s

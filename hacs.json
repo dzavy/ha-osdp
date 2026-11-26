@@ -1,3 +1,4 @@
 {
-  "name": "OSDP Integration"
+  "name": "OSDP Integration",
+  "homeassistant": "2025.2.0"
 }

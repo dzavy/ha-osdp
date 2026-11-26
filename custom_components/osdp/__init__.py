@@ -1,213 +1,202 @@
-from __future__ import annotations
-import logging
-import struct
-from typing import List
-import serial
-import osdp
+"""The OSDP integration."""
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback, Context, EventOrigin
-from homeassistant.helpers.device_registry import async_get as async_get_devreg
-from homeassistant.helpers import device_registry as dr
-from homeassistant.components import tag
+from __future__ import annotations
+
+import logging
+
+import serial
+
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
-    DOMAIN,
-    PLATFORMS,
-    CONF_PORT,
+    CONF_ADDRESS,
     CONF_BAUDRATE,
     CONF_CONTROLLER_NAME,
+    CONF_NAME,
+    CONF_PORT,
+    CONF_READERS,
     DEFAULT_BAUDRATE,
+    DEFAULT_CONTROLLER_NAME,
+    DOMAIN,
+    PLATFORMS,
+    controller_identifier,
+    reader_identifier,
 )
+from .coordinator import OSDPConfigEntry, OSDPCoordinator, OSDPRuntimeData
+from .hub import OSDPHub
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
-
-class SerialChannel(osdp.Channel):
-    """Simple serial channel implementing osdp.Channel interface."""
-
-    def __init__(self, device: str, speed: int):
-        super().__init__()
-        self.dev = serial.Serial(device, speed, timeout=0)
-
-    def read(self, max_read: int):
-        return self.dev.read(max_read)
-
-    def write(self, data: bytes):
-        return self.dev.write(data)
-
-    def flush(self):
-        self.dev.flush()
-
-    def __del__(self):
-        try:
-            self.dev.close()
-        except Exception:
-            pass
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up an OSDP controller and its readers from a config entry."""
-    data = entry.data
-    port: str = data[CONF_PORT]
-    baudrate: int = entry.options.get(CONF_BAUDRATE, data.get(CONF_BAUDRATE, DEFAULT_BAUDRATE))
-    name: str = data.get(CONF_CONTROLLER_NAME, f"OSDP Controller ({port})")
-
-    readers_cfg: List[int] = entry.options.get("readers", [])
-
-    # Controller-level callback
-    def _controller_callback(id: int, event: dict) -> int:
-        """Handle events from the OSDP ControlPanel and dispatch per reader."""
-        rid = event["reader_no"]
-
-        devreg = dr.async_get(hass)
-
-        dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
-
-        ctx = Context(user_id="80136773bd514db4a8b1631fd33194ad")
-
-        if event["event"] == osdp.Event.CardRead and dev is not None:
-            event_data = {
-                "tag_id": struct.unpack('>L', event["data"])[0],
-                "type": "tag_scanned",
-                "device_id": dev.id
-            }
-            hass.create_task(tag.async_scan_tag(hass, str(event_data["tag_id"]), event_data["device_id"], ctx))
-            hass.bus.fire("osdp_event", event_data, EventOrigin.local, ctx)
-
-        return 0
-
-    cp = None
-    if readers_cfg:
-        channel = SerialChannel(port, baudrate)
-        pd_infos = [osdp.PDInfo(rid, channel) for rid in readers_cfg]
-        cp = osdp.ControlPanel(pd_infos, osdp.LogLevel.Info, _controller_callback)
-        cp.start()
-
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        "cp": cp,
-        "readers": readers_cfg,
-        "port": port,
-        "baudrate": baudrate,
-        "name": name,
-    }
-
-    # Register controller device
-    devreg = async_get_devreg(hass)
-    devreg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, f"controller_{port}")},
-        manufacturer="OSDP",
-        name=name,
-        model="OSDP Bus",
-    )
-
-    # Register reader devices
-    for rid in readers_cfg:
-        devreg.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, f"reader_{port}_{rid}")},
-            manufacturer="OSDP",
-            name=f"OSDP Reader {rid}",
-            model="Card Reader",
-            via_device=(DOMAIN, f"controller_{port}"),
-        )
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
-
-    _LOGGER.info("OSDP controller on %s @ %s set up with readers: %s", port, baudrate, readers_cfg)
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up integration-wide actions."""
+    async_setup_services(hass)
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: OSDPConfigEntry) -> bool:
+    """Set up an OSDP controller and its readers from a config entry."""
+    hub = OSDPHub(hass, entry)
+    try:
+        await hass.async_add_executor_job(hub.start)
+    except (serial.SerialException, OSError) as exc:
+        await hass.async_add_executor_job(hub.stop)
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="cannot_open_port",
+            translation_placeholders={"port": hub.port, "error": str(exc)},
+        ) from exc
+
+    _async_register_devices(hass, entry, hub)
+
+    coordinator = OSDPCoordinator(hass, entry, hub)
+    entry.runtime_data = OSDPRuntimeData(hub=hub, coordinator=coordinator)
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await hass.async_add_executor_job(hub.stop)
+        raise
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    _LOGGER.debug(
+        "OSDP controller on %s @ %s set up with readers %s",
+        hub.port,
+        hub.baudrate,
+        hub.addresses,
+    )
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: OSDPConfigEntry) -> bool:
     """Unload an OSDP config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    data = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    if data and data["cp"]:
-        try:
-            data["cp"].stop()
-        except Exception as exc:
-            _LOGGER.warning("Error stopping ControlPanel: %s", exc)
+    if unloaded:
+        await hass.async_add_executor_job(entry.runtime_data.hub.stop)
     return unloaded
 
 
-@callback
-async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Rebuild the ControlPanel when options (readers list or baudrate) change."""
-    domain_data = hass.data[DOMAIN].get(entry.entry_id)
-    if not domain_data:
-        return
-
-    old_cp: osdp.ControlPanel | None = domain_data["cp"]
-    port: str = domain_data["port"]
-    baudrate: int = entry.options.get(CONF_BAUDRATE, domain_data["baudrate"])
-    name: str = domain_data["name"]
-
-    old_readers_cfg: List[int] = domain_data["readers"]
-    new_readers_cfg: List[int] = entry.options.get("readers", [])
-
-    # Stop old CP
-    if old_cp:
-        try:
-            old_cp.stop()
-        except Exception as exc:
-            _LOGGER.debug("Stopping previous ControlPanel failed: %s", exc)
-
-    # Controller-level callback
-    def _controller_callback(id: int, event: dict) -> int:
-        """Handle events from the OSDP ControlPanel and dispatch per reader."""
-        rid = event["reader_no"]
-
-        devreg = dr.async_get(hass)
-
-        dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
-
-        ctx = Context(user_id="80136773bd514db4a8b1631fd33194ad")
-
-        if event["event"] == osdp.Event.CardRead and dev is not None:
-            event_data = {
-                "tag_id": struct.unpack('>L', event["data"])[0],
-                "type": "tag_scanned",
-                "device_id": dev.id
-            }
-            hass.create_task(tag.async_scan_tag(hass, str(event_data["tag_id"]), event_data["device_id"], ctx))
-            hass.bus.fire("osdp_event", event_data, EventOrigin.local, ctx)
-
-        return 0
-
-    new_cp = None
-    if new_readers_cfg:
-        channel = SerialChannel(port, baudrate)
-        pd_infos = [osdp.PDInfo(rid, channel) for rid in new_readers_cfg]
-        new_cp = osdp.ControlPanel(pd_infos, osdp.LogLevel.Info, _controller_callback)
-        new_cp.start()
-
-    # Save new CP and readers
-    domain_data["cp"] = new_cp
-    domain_data["readers"] = new_readers_cfg
-    domain_data["baudrate"] = baudrate
-
-    devreg = dr.async_get(hass)
-
-    # Remove devices for readers no longer present
-    removed_ids = set(old_readers_cfg) - set(new_readers_cfg)
-    for rid in removed_ids:
-        dev = devreg.async_get_device({(DOMAIN, f"reader_{port}_{rid}")})
-        if dev:
-            devreg.async_remove_device(dev.id)
-            _LOGGER.info("Removed OSDP Reader %s (port %s)", rid, port)
-
-    # Ensure devices exist for new readers
-    for rid in new_readers_cfg:
-        devreg.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, f"reader_{port}_{rid}")},
-            manufacturer="OSDP",
-            name=f"OSDP Reader {rid}",
-            model="Card Reader",
-            via_device=(DOMAIN, f"controller_{port}"),
-        )
-
-    # Reload entry so entities are recreated/removed accordingly
+async def _async_update_listener(hass: HomeAssistant, entry: OSDPConfigEntry) -> None:
+    """Options changed (readers added/removed/edited): rebuild everything."""
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _async_register_devices(
+    hass: HomeAssistant, entry: OSDPConfigEntry, hub: OSDPHub
+) -> None:
+    """Create controller and reader devices; remove devices of deleted readers."""
+    devreg = dr.async_get(hass)
+    controller = devreg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={controller_identifier(entry.entry_id)},
+        manufacturer="OSDP",
+        model="OSDP Bus",
+        name=entry.data.get(CONF_CONTROLLER_NAME, DEFAULT_CONTROLLER_NAME),
+    )
+    wanted = {controller.id}
+    for reader in hub.readers:
+        device = devreg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={reader_identifier(entry.entry_id, reader.address)},
+            manufacturer="OSDP",
+            model="Card Reader",
+            name=reader.name,
+            via_device=controller_identifier(entry.entry_id),
+        )
+        if device.name != reader.name:
+            devreg.async_update_device(device.id, name=reader.name)
+        wanted.add(device.id)
+
+    for device in dr.async_entries_for_config_entry(devreg, entry.entry_id):
+        if device.id not in wanted:
+            devreg.async_update_device(
+                device.id, remove_config_entry_id=entry.entry_id
+            )
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: OSDPConfigEntry, device: dr.DeviceEntry
+) -> bool:
+    """Allow deleting a reader from its device page (removes it from options)."""
+    if controller_identifier(entry.entry_id) in device.identifiers:
+        return False
+
+    readers = list(entry.options.get(CONF_READERS, []))
+    remaining = [
+        r
+        for r in readers
+        if reader_identifier(entry.entry_id, int(r[CONF_ADDRESS]))
+        not in device.identifiers
+    ]
+    if len(remaining) != len(readers):
+        # Triggers the update listener, which reloads the entry.
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_READERS: remaining}
+        )
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: OSDPConfigEntry) -> bool:
+    """Migrate old config entries."""
+    if entry.version > 2:
+        return False
+
+    if entry.version == 1:
+        port = entry.data[CONF_PORT]
+        old_readers = [int(r) for r in entry.options.get(CONF_READERS, [])]
+
+        data = {
+            CONF_PORT: port,
+            CONF_BAUDRATE: int(
+                entry.options.get(
+                    CONF_BAUDRATE, entry.data.get(CONF_BAUDRATE, DEFAULT_BAUDRATE)
+                )
+            ),
+            CONF_CONTROLLER_NAME: entry.data.get(
+                CONF_CONTROLLER_NAME, DEFAULT_CONTROLLER_NAME
+            ),
+        }
+        options = {
+            CONF_READERS: [
+                {CONF_ADDRESS: rid, CONF_NAME: f"OSDP Reader {rid}"}
+                for rid in old_readers
+            ]
+        }
+
+        # Device identifiers were based on the port path; move them to the
+        # entry id so a port rename no longer orphans devices. Device ids (and
+        # thus automations referencing them) are preserved.
+        devreg = dr.async_get(hass)
+        remap = {(DOMAIN, f"controller_{port}"): controller_identifier(entry.entry_id)}
+        for rid in old_readers:
+            remap[(DOMAIN, f"reader_{port}_{rid}")] = reader_identifier(
+                entry.entry_id, rid
+            )
+        for old, new in remap.items():
+            if device := devreg.async_get_device({old}):
+                devreg.async_update_device(device.id, new_identifiers={new})
+
+        # Reader identity moved from five sensors into the device registry and
+        # the free-text controller status sensor was replaced.
+        entreg = er.async_get(hass)
+        for ent in er.async_entries_for_config_entry(entreg, entry.entry_id):
+            if not ent.unique_id.startswith("osdp_online_"):
+                entreg.async_remove(ent.entity_id)
+
+        hass.config_entries.async_update_entry(
+            entry, data=data, options=options, version=2
+        )
+        _LOGGER.info("Migrated OSDP config entry %s to version 2", entry.entry_id)
+
+    return True

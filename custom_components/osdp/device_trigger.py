@@ -10,10 +10,10 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.components.homeassistant.triggers import event as event_trigger
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN
+from .const import DOMAIN, EVENT_OSDP, EVENT_TYPE_KEYPRESS, EVENT_TYPE_TAG_SCANNED
 
 # Supported trigger types
-TRIGGER_TYPES = {"tag_scanned"}
+TRIGGER_TYPES = {EVENT_TYPE_TAG_SCANNED, EVENT_TYPE_KEYPRESS}
 
 TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
     {
@@ -33,7 +33,7 @@ async def async_get_triggers(hass: HomeAssistant, device_id: str) -> list[dict[s
     # Only expose triggers for reader devices (not controller)
     for ident_domain, ident in device.identifiers:
         if ident_domain == DOMAIN and ident.startswith("reader_"):
-            for trig_type in TRIGGER_TYPES:
+            for trig_type in sorted(TRIGGER_TYPES):
                 triggers.append(
                     {
                         CONF_PLATFORM: "device",
@@ -55,7 +55,7 @@ async def async_attach_trigger(hass, config, action, trigger_info):
     event_config = event_trigger.TRIGGER_SCHEMA(
         {
             event_trigger.CONF_PLATFORM: "event",
-            event_trigger.CONF_EVENT_TYPE: "osdp_event",
+            event_trigger.CONF_EVENT_TYPE: EVENT_OSDP,
             event_trigger.CONF_EVENT_DATA: {
                 CONF_DEVICE_ID: config[CONF_DEVICE_ID],
                 CONF_TYPE: config[CONF_TYPE],

@@ -2,40 +2,208 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up OSDP Controller",
-        "description": "Configure your OSDP controller hub (serial port, baudrate, name).",
+        "title": "Set up OSDP controller",
+        "description": "Select the RS-485 adapter the OSDP readers are wired to. Paths under /dev/serial/by-id stay the same across reboots and are preferred. {hint}",
         "data": {
-          "port": "Serial Port",
-          "baudrate": "Baudrate",
-          "controller_name": "Controller Name"
+          "port": "Serial port",
+          "baudrate": "Baud rate",
+          "controller_name": "Controller name"
+        },
+        "data_description": {
+          "port": "Pick a detected adapter or type a device path.",
+          "baudrate": "Must match the speed configured on the readers (commonly 9600 or 115200)."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure OSDP controller",
+        "description": "Change the serial port or baud rate of this bus.",
+        "data": {
+          "port": "Serial port",
+          "baudrate": "Baud rate"
         }
       }
     },
     "error": {
-      "invalid_id": "Reader ID must be a number",
-      "out_of_range": "Reader ID must be between 0 and 127",
-      "duplicate": "Reader ID already exists",
-      "not_found": "Reader ID not found"
+      "cannot_connect": "The serial port could not be opened. Check the path and that no other program is using it."
     },
     "abort": {
-      "no_controllers": "No OSDP controllers are configured yet."
+      "already_configured": "This serial port is already configured.",
+      "reconfigure_successful": "The controller was reconfigured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Manage OSDP Readers",
-        "description": "Add or remove readers",
+        "title": "OSDP readers",
+        "menu_options": {
+          "add_reader": "Add a reader",
+          "edit_reader": "Edit a reader",
+          "remove_reader": "Remove readers",
+          "settings": "Settings"
+        }
+      },
+      "add_reader": {
+        "title": "Add a reader",
+        "description": "Each reader on the bus has a unique OSDP address (0–126).",
         "data": {
-          "action": "Action",
-          "reader_id": "Reader ID"
+          "address": "Address",
+          "name": "Name",
+          "scbk": "Secure Channel key (SCBK)"
+        },
+        "data_description": {
+          "scbk": "Optional 16-byte key as 32 hex characters. When set, the connection is encrypted and the reader is only used once the secure channel is up. Leave empty for an unencrypted connection."
+        }
+      },
+      "edit_reader": {
+        "title": "Edit a reader",
+        "data": {
+          "reader": "Reader"
+        }
+      },
+      "edit_reader_details": {
+        "title": "Edit reader {address}",
+        "data": {
+          "name": "Name",
+          "scbk": "Secure Channel key (SCBK)"
+        },
+        "data_description": {
+          "scbk": "32 hex characters. Clear the field to disable the secure channel."
+        }
+      },
+      "remove_reader": {
+        "title": "Remove readers",
+        "data": {
+          "readers": "Readers to remove"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "data": {
+          "run_as_user": "Attribute scans to user"
+        },
+        "data_description": {
+          "run_as_user": "Optional. Card scans and key presses are recorded as done by this user, e.g. in the logbook."
+        }
+      }
+    },
+    "error": {
+      "duplicate": "A reader with this address already exists.",
+      "invalid_scbk": "The key must be exactly 32 hexadecimal characters."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "serial_connection": {
+        "name": "Serial connection"
+      },
+      "online": {
+        "name": "Online"
+      },
+      "secure_channel": {
+        "name": "Secure channel"
+      }
+    },
+    "sensor": {
+      "readers_online": {
+        "name": "Readers online"
+      }
+    },
+    "event": {
+      "card": {
+        "name": "Card",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "card_read": "Card read"
+            }
+          }
+        }
+      },
+      "keypad": {
+        "name": "Keypad",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "keypress": "Key press"
+            }
+          }
         }
       }
     }
   },
   "device_automation": {
     "trigger_type": {
-      "tag_scanned": "Tag scanned"
+      "tag_scanned": "Tag scanned",
+      "keypress": "Key pressed"
+    }
+  },
+  "exceptions": {
+    "cannot_open_port": {
+      "message": "Cannot open serial port {port}: {error}"
+    },
+    "unknown_device": {
+      "message": "Device {device_id} not found."
+    },
+    "not_a_reader": {
+      "message": "Device {device_id} is not an OSDP reader."
+    },
+    "not_loaded": {
+      "message": "The OSDP controller for this reader is not loaded."
+    },
+    "reader_offline": {
+      "message": "Reader at address {address} is offline."
+    },
+    "command_failed": {
+      "message": "The command could not be queued for reader {address}."
+    }
+  },
+  "selector": {
+    "led_color": {
+      "options": {
+        "off": "Off",
+        "red": "Red",
+        "green": "Green",
+        "amber": "Amber",
+        "blue": "Blue",
+        "magenta": "Magenta",
+        "cyan": "Cyan",
+        "white": "White"
+      }
+    }
+  },
+  "services": {
+    "set_led": {
+      "name": "Set LED",
+      "description": "Sets the LED of a reader, permanently or temporarily.",
+      "fields": {
+        "device_id": { "name": "Reader", "description": "The reader to control." },
+        "color": { "name": "Color", "description": "Color while the LED is on." },
+        "off_color": { "name": "Off color", "description": "Color during the off phase when blinking." },
+        "on_time": { "name": "On time", "description": "Blink on time. Leave both on and off time at 0 for a steady color." },
+        "off_time": { "name": "Off time", "description": "Blink off time." },
+        "duration": { "name": "Duration", "description": "If set, the LED returns to its previous state after this time (e.g. green for 3 s on access granted)." },
+        "led_number": { "name": "LED number", "description": "LED index on readers with several LEDs." }
+      }
+    },
+    "beep": {
+      "name": "Beep",
+      "description": "Sounds the buzzer of a reader.",
+      "fields": {
+        "device_id": { "name": "Reader", "description": "The reader to control." },
+        "on_time": { "name": "On time", "description": "Length of each beep." },
+        "off_time": { "name": "Off time", "description": "Pause between beeps." },
+        "repeat": { "name": "Repeat", "description": "Number of beeps." }
+      }
+    },
+    "set_output": {
+      "name": "Set output",
+      "description": "Switches an output (e.g. a door strike relay) on a reader.",
+      "fields": {
+        "device_id": { "name": "Reader", "description": "The reader to control." },
+        "output": { "name": "Output", "description": "Output number." },
+        "state": { "name": "State", "description": "Turn the output on or off." },
+        "duration": { "name": "Duration", "description": "If set, the output reverts after this time (e.g. unlock for 5 s)." }
+      }
     }
   }
 }
